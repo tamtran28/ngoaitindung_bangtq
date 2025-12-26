@@ -1,14 +1,20 @@
 import pandas as pd
-from .loader import normalize_chuyentien
+
+def normalize(df):
+    df = df.rename(columns={
+        "NGAY_GD": "NGAY",
+        "CIF": "CIF",
+        "SO_TIEN": "SOTIEN",
+        "KENH": "KENH"
+    })
+    df["NAM"] = pd.to_datetime(df["NGAY"], errors="coerce").dt.year
+    return df
 
 
-def bang_1_ct_trong_nuoc(df, dvkd):
-    df = normalize_chuyentien(df)
-    df =ư= df[df["DVKD"].astype(str) == str(dvkd)]
-    df = df[df["KENH"].str.upper() != "SWIFT"]
-
+def tong_ct_trong_nuoc(df, nam):
     return (
-        df.groupby(["KENH", "NAM"])
+        df.query("KENH != 'SWIFT' and NAM == @nam")
+        .groupby("KENH")
         .agg(
             TONG_TIEN=("SOTIEN", "sum"),
             SO_GD=("SOTIEN", "count")
@@ -17,45 +23,28 @@ def bang_1_ct_trong_nuoc(df, dvkd):
     )
 
 
-def bang_2_ct_giao_dich_lon(df, dvkd, nguong):
-    df = normalize_chuyentien(df)
-    df = df[
-        (df["DVKD"].astype(str) == str(dvkd)) &
-        (df["KENH"].str.upper() != "SWIFT")
-    ]
-
-    rows = []
-    for nam in sorted(df["NAM"].unique()):
-        df_nam = df[df["NAM"] == nam]
-        tong_kh = df_nam["CIF"].nunique()
-
-        gd_kh = df_nam.groupby("CIF")["SOTIEN"].sum()
-        gd_lon = gd_kh[gd_kh >= nguong]
-
-        rows.append({
-            "NAM": nam,
-            "TONG_SO_KH": tong_kh,
-            "SO_KH_GD_LON": gd_lon.count(),
-            "TONG_TIEN_GD_LON": gd_lon.sum() / 1e9,
-            "TY_LE": gd_lon.count() / tong_kh if tong_kh else 0
-        })
-
-    return pd.DataFrame(rows)
+def giao_dich_lon(df, nam, nguong):
+    df = df.query("KENH != 'SWIFT' and NAM == @nam")
+    kh = (
+        df.groupby("CIF")["SOTIEN"]
+        .sum()
+        .reset_index()
+    )
+    lon = kh[kh["SOTIEN"] >= nguong]
+    return {
+        "tong_kh": kh["CIF"].nunique(),
+        "so_kh_lon": lon["CIF"].nunique(),
+        "tong_tien": lon["SOTIEN"].sum()
+    }
 
 
-def bang_3_ct_nuoc_ngoai(df, dvkd):
-    df = normalize_chuyentien(df)
-    df = df[
-        (df["DVKD"].astype(str) == str(dvkd)) &
-        (df["KENH"].str.upper() == "SWIFT")
-    ]
-
+def ct_nuoc_ngoai(df, nam):
+    df = df.query("KENH == 'SWIFT' and NAM == @nam")
     return (
-        df.groupby("NAM")
+        df.groupby("CIF")
         .agg(
             TONG_TIEN=("SOTIEN", "sum"),
             SO_GD=("SOTIEN", "count")
         )
         .reset_index()
     )
-
