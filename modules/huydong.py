@@ -1,40 +1,50 @@
 import pandas as pd
-from .loader import normalize_huydong
+
+def normalize(df):
+    df = df.rename(columns={
+        "NGAY_GD": "NGAY",
+        "CIF": "CIF",
+        "SO_TIEN": "SOTIEN",
+        "KENH": "KENH"
+    })
+    df["NAM"] = pd.to_datetime(df["NGAY"], errors="coerce").dt.year
+    return df
 
 
-def bang_1_kt(df, dvkd):
-    df = normalize_huydong(df)
-    df = df[df["DVKD"].astype(str) == str(dvkd)]
-
+def tong_ct_trong_nuoc(df, nam):
     return (
-        df.groupby(["NAM", "LOAI_KH", "KY_HAN"])
+        df.query("KENH != 'SWIFT' and NAM == @nam")
+        .groupby("KENH")
         .agg(
-            SO_DU=("SODU", "sum"),
-            SO_KH=("CIF", "nunique")
+            TONG_TIEN=("SOTIEN", "sum"),
+            SO_GD=("SOTIEN", "count")
         )
         .reset_index()
     )
 
 
-def bang_2_kt(df, code_df, dvkd):
-    df = normalize_huydong(df)
-    df = df[df["DVKD"].astype(str) == str(dvkd)]
-
-    df = df.merge(code_df[["GL_SUB", "TEN_SP"]], on="GL_SUB", how="left")
-
-    kq = (
-        df.groupby(["NAM", "TEN_SP"])
-        .agg(SO_DU=("SODU", "sum"))
+def giao_dich_lon(df, nam, nguong):
+    df = df.query("KENH != 'SWIFT' and NAM == @nam")
+    kh = (
+        df.groupby("CIF")["SOTIEN"]
+        .sum()
         .reset_index()
     )
+    lon = kh[kh["SOTIEN"] >= nguong]
+    return {
+        "tong_kh": kh["CIF"].nunique(),
+        "so_kh_lon": lon["CIF"].nunique(),
+        "tong_tien": lon["SOTIEN"].sum()
+    }
 
-    kq["TY_TRONG"] = kq.groupby("NAM")["SO_DU"].apply(lambda x: x / x.sum())
-    return kq
 
-
-def bang_3_kt(df, dvkd):
-    df = normalize_huydong(df)
-    df = df[df["DVKD"].astype(str) == str(dvkd)]
-
-    kh_sd = df.groupby(["NAM", "CIF"])["SODU"].sum().reset_index()
-    return kh_sd
+def ct_nuoc_ngoai(df, nam):
+    df = df.query("KENH == 'SWIFT' and NAM == @nam")
+    return (
+        df.groupby("CIF")
+        .agg(
+            TONG_TIEN=("SOTIEN", "sum"),
+            SO_GD=("SOTIEN", "count")
+        )
+        .reset_index()
+    )
